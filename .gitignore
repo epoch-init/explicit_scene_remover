@@ -269,3 +269,6 @@ Thumbs.db
 .stylelintcache
 .turbo/
 .next/
+
+# my entries
+temp/
