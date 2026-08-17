@@ -1,9 +1,8 @@
 import os
 import gc
 import torch
-from transformers import pipeline
+from transformers import pipeline, AutoProcessor, AutoModelForSpeechSeq2Seq
 
-# Hardcoded profanity list for MVP (Can be moved to user settings later)
 PROFANITY_LIST = ["fuck", "shit", "bitch", "asshole", "cunt", "damn"]
 
 class AudioModelWrapper:
@@ -15,10 +14,16 @@ class AudioModelWrapper:
         """Transcribes audio, extracts word timestamps, and flags profanity."""
         print(f"Loading Audio model to GPU ({'CUDA' if self.device == 0 else 'CPU'})...")
         
+        # Explicitly load from local directory
+        processor = AutoProcessor.from_pretrained(self.model_path, local_files_only=True)
+        model = AutoModelForSpeechSeq2Seq.from_pretrained(self.model_path, local_files_only=True)
+        
         # return_timestamps=True is crucial for mapping text back to video time
         transcriber = pipeline(
             "automatic-speech-recognition", 
-            model=self.model_path, 
+            model=model, 
+            tokenizer=processor.tokenizer,
+            feature_extractor=processor.feature_extractor,
             device=self.device,
             chunk_length_s=30,
         )
@@ -39,7 +44,7 @@ class AudioModelWrapper:
                         "start": timestamp[0],
                         "end": timestamp[1],
                         "label": "Profanity",
-                        "confidence": 1.0, # Whisper doesn't easily expose word-level confidence
+                        "confidence": 1.0, 
                         "word": word
                     })
                     break # Tag the chunk once
@@ -47,6 +52,8 @@ class AudioModelWrapper:
         # --- STRICT 2GB VRAM FLUSH ---
         print("Unloading Audio model from VRAM...")
         del transcriber
+        del model
+        del processor
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()

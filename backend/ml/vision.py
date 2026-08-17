@@ -2,18 +2,22 @@ import os
 import gc
 import torch
 from PIL import Image
-from transformers import pipeline
+from transformers import pipeline, AutoImageProcessor, AutoModelForImageClassification
 
 class VisionModelWrapper:
     def __init__(self, model_path="models/vision_nsfw"):
         self.model_path = os.path.join(os.getcwd(), model_path)
-        # Check if CUDA is available, otherwise fallback to CPU
         self.device = 0 if torch.cuda.is_available() else -1
 
     def analyze(self, frames_dir, fps, threshold=0.7):
         """Processes extracted frames and returns NSFW timestamps."""
         print(f"Loading Vision model to GPU ({'CUDA' if self.device == 0 else 'CPU'})...")
-        classifier = pipeline("image-classification", model=self.model_path, device=self.device)
+        
+        # Explicitly load from local directory to prevent HuggingFace repo parsing errors
+        processor = AutoImageProcessor.from_pretrained(self.model_path, local_files_only=True)
+        model = AutoModelForImageClassification.from_pretrained(self.model_path, local_files_only=True)
+        
+        classifier = pipeline("image-classification", model=model, image_processor=processor, device=self.device)
         
         results = []
         
@@ -45,6 +49,8 @@ class VisionModelWrapper:
         # --- STRICT 2GB VRAM FLUSH ---
         print("Unloading Vision model from VRAM...")
         del classifier
+        del model
+        del processor
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
