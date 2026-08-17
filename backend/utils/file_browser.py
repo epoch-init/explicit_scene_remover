@@ -16,16 +16,19 @@ def get_directory_contents(target_path):
     directories = []
     files = []
 
+    # Allowed video extensions
+    VALID_EXTENSIONS = ['.mp4', '.avi', '.srt']
+
     for item in items:
         full_path = os.path.join(target_path, item)
         if os.path.isdir(full_path):
             directories.append({"name": item, "path": full_path, "type": "directory"})
         elif os.path.isfile(full_path):
             ext = os.path.splitext(item)[1].lower()
-            if ext in ['.mp4', '.srt']:
+            if ext in VALID_EXTENSIONS:
                 files.append({"name": item, "path": full_path, "type": "file", "extension": ext})
 
-    # Sort alphabetically for a better UX later
+    # Sort alphabetically for a better UX
     directories.sort(key=lambda x: x['name'].lower())
     files.sort(key=lambda x: x['name'].lower())
 
@@ -33,7 +36,6 @@ def get_directory_contents(target_path):
     
     return {
         "current_path": target_path,
-        # If the parent is the same as current (e.g., root '/'), keep it root
         "parent_path": parent_path if parent_path != target_path else target_path,
         "directories": directories,
         "files": files

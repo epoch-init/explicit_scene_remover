@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Folder, FileVideo, FileText, CornerLeftUp } from 'lucide-react';
 
 export default function FileBrowser({ onSelectVideo, onSelectSubtitle }) {
-  const [currentPath, setCurrentPath] = useState('/'); // Default to root
+  const [currentPath, setCurrentPath] = useState('/');
   const [parentPath, setParentPath] = useState('/');
   const [directories, setDirectories] = useState([]);
   const [files, setFiles] = useState([]);
@@ -33,10 +33,11 @@ export default function FileBrowser({ onSelectVideo, onSelectSubtitle }) {
 
   useEffect(() => {
     fetchDirectory(currentPath);
-  }, []); // Initial load
+  }, []);
 
   const handleFileClick = (file) => {
-    if (file.extension === '.mp4') {
+    // Treat both mp4 and avi as valid video selections
+    if (file.extension === '.mp4' || file.extension === '.avi') {
       onSelectVideo(file.path);
     } else if (file.extension === '.srt') {
       onSelectSubtitle(file.path);
@@ -47,20 +48,17 @@ export default function FileBrowser({ onSelectVideo, onSelectSubtitle }) {
     <div className="bg-gray-800 rounded-lg p-4 shadow-lg border border-gray-700 h-96 flex flex-col">
       <h2 className="text-lg font-semibold text-gray-200 mb-2">Local File Browser</h2>
 
-      {/* Address Bar */}
       <div className="flex items-center gap-2 mb-4 bg-gray-900 p-2 rounded text-sm text-gray-300 overflow-x-hidden">
         <span className="truncate flex-1">{currentPath}</span>
       </div>
 
       {error && <div className="text-red-400 text-sm mb-2">{error}</div>}
 
-      {/* File List */}
       <div className="flex-1 overflow-y-auto space-y-1 pr-2 custom-scrollbar">
         {loading ? (
           <div className="text-gray-400 text-sm p-2">Loading...</div>
         ) : (
           <>
-            {/* Go Up Button */}
             {currentPath !== parentPath && (
               <button
                 onClick={() => fetchDirectory(parentPath)}
@@ -71,7 +69,6 @@ export default function FileBrowser({ onSelectVideo, onSelectSubtitle }) {
               </button>
             )}
 
-            {/* Directories */}
             {directories.map((dir) => (
               <button
                 key={dir.path}
@@ -83,14 +80,14 @@ export default function FileBrowser({ onSelectVideo, onSelectSubtitle }) {
               </button>
             ))}
 
-            {/* Files */}
             {files.map((file) => (
               <button
                 key={file.path}
                 onClick={() => handleFileClick(file)}
                 className="w-full flex items-center gap-2 p-2 hover:bg-gray-700 rounded text-gray-300 transition text-sm text-left group"
               >
-                {file.extension === '.mp4' ? (
+                {/* Apply the video icon to both MP4 and AVI files */}
+                {file.extension === '.mp4' || file.extension === '.avi' ? (
                   <FileVideo size={16} className="text-green-400 shrink-0" />
                 ) : (
                   <FileText size={16} className="text-yellow-400 shrink-0" />

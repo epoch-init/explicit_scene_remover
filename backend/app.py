@@ -7,7 +7,6 @@ from flask_cors import CORS
 from flask_socketio import SocketIO
 from config import Config
 from utils.file_browser import get_directory_contents
-from tasks import export_video_task
 
 socketio = SocketIO()
 
@@ -35,20 +34,22 @@ def create_app():
         video_path = request.args.get('path')
         if not video_path or not os.path.exists(video_path):
             return "File not found", 404
-        # Note: For MVP send_file handles basic streaming.
-        return send_file(video_path, mimetype='video/mp4')
+            
+        # Dynamically set mimetype based on extension
+        ext = os.path.splitext(video_path)[1].lower()
+        mimetype = 'video/x-msvideo' if ext == '.avi' else 'video/mp4'
+        
+        return send_file(video_path, mimetype=mimetype)
 
     from tasks import analyze_video_task
     @app.route('/api/analyze', methods=['POST'])
     def trigger_analysis():
         data = request.json or {}
-        
-        # Validate required
         video_path = data.get('video_path')
+        
         if not video_path:
             return jsonify({"error": "video_path is required"}), 400
             
-        # Get settings
         fps = data.get('fps', 1.0)
         target_labels = data.get('target_labels', ['Nudity/NSFW', 'Profanity'])
         threshold = data.get('threshold', 0.7)
@@ -57,13 +58,14 @@ def create_app():
         task = analyze_video_task.delay(video_path, fps, target_labels, threshold, padding)
         return jsonify({"task_id": task.id, "status": "Task Started"}), 202
 
+    from tasks import export_video_task
     @app.route('/api/export', methods=['POST'])
     def trigger_export():
         data = request.json or {}
         video_path = data.get('video_path')
         srt_path = data.get('srt_path')
         cuts = data.get('cuts', [])
-        mode = data.get('mode', 'fast') # 'fast' or 'accurate'
+        mode = data.get('mode', 'fast')
         
         if not video_path:
             return jsonify({"error": "video_path is required"}), 400
