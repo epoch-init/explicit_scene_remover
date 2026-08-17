@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import FileBrowser from './components/FileBrowser';
+import VideoPlayer from './components/VideoPlayer';
 
 const socket = io('http://localhost:5000');
 
@@ -11,7 +12,15 @@ function App() {
 
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [selectedSubtitle, setSelectedSubtitle] = useState(null);
+
+  // New Settings State
   const [fps, setFps] = useState(1.0);
+  const [threshold, setThreshold] = useState(0.7);
+  const [padding, setPadding] = useState(1.0);
+  const [targetLabels, setTargetLabels] = useState({
+    'Nudity/NSFW': true,
+    'Profanity': true
+  });
 
   useEffect(() => {
     socket.on('connect', () => console.log('Connected to WebSocket'));
@@ -24,7 +33,7 @@ function App() {
     socket.on('task_complete', (data) => {
       setStatus(data.status);
       setProgress(data.progress);
-      setCuts(data.cuts);
+      setCuts(data.cuts); // Array of processed cut objects
     });
 
     return () => {
@@ -34,15 +43,25 @@ function App() {
     };
   }, []);
 
+  const handleLabelToggle = (label) => {
+    setTargetLabels(prev => ({ ...prev, [label]: !prev[label] }));
+  };
+
   const startAnalysis = async () => {
     if (!selectedVideo) {
       alert("Please select a video file first.");
       return;
     }
 
+    const labelsToProcess = Object.keys(targetLabels).filter(k => targetLabels[k]);
+    if (labelsToProcess.length === 0) {
+      alert("Please select at least one target label (e.g., Nudity or Profanity).");
+      return;
+    }
+
     setStatus('Initializing task...');
     setProgress(0);
-    setCuts(null);
+    setCuts(null); // Reset UI
 
     try {
       const response = await fetch('http://localhost:5000/api/analyze', {
@@ -51,7 +70,10 @@ function App() {
         body: JSON.stringify({
           video_path: selectedVideo,
           srt_path: selectedSubtitle,
-          fps: parseFloat(fps)
+          fps: parseFloat(fps),
+          threshold: parseFloat(threshold),
+          padding: parseFloat(padding),
+          target_labels: labelsToProcess
         })
       });
 
@@ -64,11 +86,17 @@ function App() {
     }
   };
 
+  const handleExport = (finalCuts) => {
+    // We will implement this API call in Phase 5
+    console.log("Exporting cuts to backend:", finalCuts);
+    alert("Export triggered! (Phase 5 will process this via FFmpeg)");
+  };
+
   return (
     <div className="min-h-screen bg-gray-900 text-white p-8">
-      <h1 className="text-3xl font-bold mb-8 text-center">AutoCleanse Dashboard</h1>
+      <h1 className="text-3xl font-bold mb-8 text-center text-blue-400">AutoCleanse Dashboard</h1>
 
-      <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
+      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8">
 
         {/* Left Column: File Browser */}
         <div className="space-y-4">
@@ -76,86 +104,70 @@ function App() {
             onSelectVideo={setSelectedVideo}
             onSelectSubtitle={setSelectedSubtitle}
           />
-
-          {/* Selection Status */}
-          <div className="bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-700 text-sm space-y-2">
-            <div>
-              <span className="font-semibold text-gray-400">Selected Video: </span>
-              <span className={selectedVideo ? "text-green-400" : "text-red-400"}>
-                {selectedVideo || "None selected"}
-              </span>
-            </div>
-            <div>
-              <span className="font-semibold text-gray-400">Selected Subtitle: </span>
-              <span className={selectedSubtitle ? "text-yellow-400" : "text-gray-500"}>
-                {selectedSubtitle || "None selected (Optional)"}
-              </span>
-            </div>
-            {selectedSubtitle && (
-              <button
-                onClick={() => setSelectedSubtitle(null)}
-                className="text-xs text-red-400 hover:underline"
-              >
-                Clear Subtitle
-              </button>
-            )}
+          <div className="bg-gray-800 p-4 rounded-lg border border-gray-700 text-sm space-y-2">
+            <div><span className="font-semibold text-gray-400">Video: </span> <span className={selectedVideo ? "text-green-400" : "text-red-400"}>{selectedVideo || "None"}</span></div>
+            <div><span className="font-semibold text-gray-400">Subtitle: </span> <span className={selectedSubtitle ? "text-yellow-400" : "text-gray-500"}>{selectedSubtitle || "None"}</span></div>
           </div>
         </div>
 
         {/* Right Column: Settings & Progress */}
-        <div className="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700 flex flex-col">
-          <h2 className="text-xl font-semibold mb-4">Analysis Settings</h2>
+        <div className="bg-gray-800 p-6 rounded-lg border border-gray-700 flex flex-col">
+          <h2 className="text-xl font-semibold mb-4 border-b border-gray-700 pb-2">Detection Settings</h2>
 
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-400 mb-2">
-              Extraction FPS: {fps}
-            </label>
-            <input
-              type="range"
-              min="0.1" max="2.0" step="0.1"
-              value={fps}
-              onChange={(e) => setFps(e.target.value)}
-              className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
-            />
-            <p className="text-xs text-gray-500 mt-1">Lower = Faster analysis, Higher = Better accuracy</p>
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-400 mb-2">Target Labels</label>
+              <div className="space-y-2">
+                {Object.keys(targetLabels).map(label => (
+                  <label key={label} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-700 p-1 rounded">
+                    <input type="checkbox" checked={targetLabels[label]} onChange={() => handleLabelToggle(label)} className="accent-blue-500 w-4 h-4" />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-1">Confidence Threshold: {(threshold * 100).toFixed(0)}%</label>
+                <input type="range" min="0.1" max="0.99" step="0.01" value={threshold} onChange={(e) => setThreshold(e.target.value)} className="w-full accent-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-1">Scene Padding: {padding}s</label>
+                <input type="range" min="0.0" max="5.0" step="0.5" value={padding} onChange={(e) => setPadding(e.target.value)} className="w-full accent-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-1">Extraction FPS: {fps}</label>
+                <input type="range" min="0.1" max="2.0" step="0.1" value={fps} onChange={(e) => setFps(e.target.value)} className="w-full accent-blue-500" />
+              </div>
+            </div>
           </div>
 
-          <button
-            onClick={startAnalysis}
-            disabled={!selectedVideo}
-            className={`w-full font-bold py-3 px-4 rounded mb-6 transition ${selectedVideo
-                ? 'bg-blue-600 hover:bg-blue-500 text-white'
-                : 'bg-gray-600 text-gray-400 cursor-not-allowed'
-              }`}
-          >
-            Start Analysis
+          <button onClick={startAnalysis} disabled={!selectedVideo} className={`w-full font-bold py-3 px-4 rounded mb-6 transition ${selectedVideo ? 'bg-blue-600 hover:bg-blue-500' : 'bg-gray-600 cursor-not-allowed text-gray-400'}`}>
+            Analyze Video
           </button>
 
           <div className="mt-auto">
             <div className="mb-2 text-sm text-gray-300 flex justify-between">
-              <span>Status: {status}</span>
-              <span>{progress}%</span>
+              <span>{status}</span><span>{progress}%</span>
             </div>
-
-            {/* Progress Bar */}
-            <div className="w-full bg-gray-700 rounded-full h-4 mb-4 overflow-hidden">
-              <div
-                className="bg-green-500 h-4 rounded-full transition-all duration-500 ease-out"
-                style={{ width: `${progress}%` }}
-              ></div>
+            <div className="w-full bg-gray-700 rounded-full h-4">
+              <div className="bg-green-500 h-4 rounded-full transition-all duration-300" style={{ width: `${progress}%` }}></div>
             </div>
-
-            {cuts && (
-              <div className="mt-4 p-4 bg-gray-900 rounded border border-gray-700">
-                <h3 className="font-bold text-green-400 mb-2">Task Complete!</h3>
-                <p className="text-xs text-gray-400 mb-2">Check the backend `temp/` folder to see the extracted frames and audio.</p>
-                <pre className="text-xs overflow-x-auto text-gray-300">{JSON.stringify(cuts, null, 2)}</pre>
-              </div>
-            )}
           </div>
         </div>
-
       </div>
+
+      {/* Full-width Video Review Player appears after analysis completes */}
+      {cuts && (
+        <div className="max-w-6xl mx-auto">
+          <VideoPlayer
+            videoPath={selectedVideo}
+            initialCuts={cuts}
+            onExport={handleExport}
+          />
+        </div>
+      )}
     </div>
   );
 }
