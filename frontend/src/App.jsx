@@ -13,10 +13,11 @@ function App() {
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [selectedSubtitle, setSelectedSubtitle] = useState(null);
 
-  // New Settings State
+  // Settings State
   const [fps, setFps] = useState(1.0);
   const [threshold, setThreshold] = useState(0.7);
   const [padding, setPadding] = useState(1.0);
+  const [exportMode, setExportMode] = useState('fast'); // NEW: Export Mode
   const [targetLabels, setTargetLabels] = useState({
     'Nudity/NSFW': true,
     'Profanity': true
@@ -33,13 +34,20 @@ function App() {
     socket.on('task_complete', (data) => {
       setStatus(data.status);
       setProgress(data.progress);
-      setCuts(data.cuts); // Array of processed cut objects
+      setCuts(data.cuts);
+    });
+
+    socket.on('export_complete', (data) => {
+      setStatus(`Saved to: ${data.video_path}`);
+      setProgress(100);
+      alert(`Export Successful!\nSaved to: ${data.video_path}`);
     });
 
     return () => {
       socket.off('connect');
       socket.off('task_progress');
       socket.off('task_complete');
+      socket.off('export_complete');
     };
   }, []);
 
@@ -48,48 +56,43 @@ function App() {
   };
 
   const startAnalysis = async () => {
-    if (!selectedVideo) {
-      alert("Please select a video file first.");
-      return;
-    }
-
+    if (!selectedVideo) return alert("Please select a video file first.");
     const labelsToProcess = Object.keys(targetLabels).filter(k => targetLabels[k]);
-    if (labelsToProcess.length === 0) {
-      alert("Please select at least one target label (e.g., Nudity or Profanity).");
-      return;
-    }
+    if (labelsToProcess.length === 0) return alert("Please select a target label.");
 
-    setStatus('Initializing task...');
+    setStatus('Initializing analysis...');
     setProgress(0);
-    setCuts(null); // Reset UI
+    setCuts(null);
 
-    try {
-      const response = await fetch('http://localhost:5000/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          video_path: selectedVideo,
-          srt_path: selectedSubtitle,
-          fps: parseFloat(fps),
-          threshold: parseFloat(threshold),
-          padding: parseFloat(padding),
-          target_labels: labelsToProcess
-        })
-      });
-
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || "Failed to start analysis");
-      }
-    } catch (err) {
-      setStatus(`Error: ${err.message}`);
-    }
+    await fetch('http://localhost:5000/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        video_path: selectedVideo,
+        srt_path: selectedSubtitle,
+        fps: parseFloat(fps),
+        threshold: parseFloat(threshold),
+        padding: parseFloat(padding),
+        target_labels: labelsToProcess
+      })
+    });
   };
 
-  const handleExport = (finalCuts) => {
-    // We will implement this API call in Phase 5
-    console.log("Exporting cuts to backend:", finalCuts);
-    alert("Export triggered! (Phase 5 will process this via FFmpeg)");
+  const handleExport = async (finalCuts) => {
+    setStatus('Initializing export...');
+    setProgress(0);
+    setCuts(null); // Hide player during export
+
+    await fetch('http://localhost:5000/api/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        video_path: selectedVideo,
+        srt_path: selectedSubtitle,
+        cuts: finalCuts,
+        mode: exportMode
+      })
+    });
   };
 
   return (
@@ -98,26 +101,23 @@ function App() {
 
       <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8">
 
-        {/* Left Column: File Browser */}
+        {/* Left Column */}
         <div className="space-y-4">
-          <FileBrowser
-            onSelectVideo={setSelectedVideo}
-            onSelectSubtitle={setSelectedSubtitle}
-          />
+          <FileBrowser onSelectVideo={setSelectedVideo} onSelectSubtitle={setSelectedSubtitle} />
           <div className="bg-gray-800 p-4 rounded-lg border border-gray-700 text-sm space-y-2">
             <div><span className="font-semibold text-gray-400">Video: </span> <span className={selectedVideo ? "text-green-400" : "text-red-400"}>{selectedVideo || "None"}</span></div>
             <div><span className="font-semibold text-gray-400">Subtitle: </span> <span className={selectedSubtitle ? "text-yellow-400" : "text-gray-500"}>{selectedSubtitle || "None"}</span></div>
           </div>
         </div>
 
-        {/* Right Column: Settings & Progress */}
+        {/* Right Column */}
         <div className="bg-gray-800 p-6 rounded-lg border border-gray-700 flex flex-col">
-          <h2 className="text-xl font-semibold mb-4 border-b border-gray-700 pb-2">Detection Settings</h2>
+          <h2 className="text-xl font-semibold mb-4 border-b border-gray-700 pb-2">Detection & Export Settings</h2>
 
           <div className="grid grid-cols-2 gap-4 mb-6">
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-2">Target Labels</label>
-              <div className="space-y-2">
+              <div className="space-y-2 mb-4">
                 {Object.keys(targetLabels).map(label => (
                   <label key={label} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-700 p-1 rounded">
                     <input type="checkbox" checked={targetLabels[label]} onChange={() => handleLabelToggle(label)} className="accent-blue-500 w-4 h-4" />
@@ -125,21 +125,22 @@ function App() {
                   </label>
                 ))}
               </div>
+
+              <label className="block text-sm font-medium text-gray-400 mb-2">Export Quality Mode</label>
+              <select
+                value={exportMode}
+                onChange={(e) => setExportMode(e.target.value)}
+                className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-gray-300 outline-none focus:border-blue-500"
+              >
+                <option value="fast">Fast (Keyframe Snap)</option>
+                <option value="accurate">Accurate (Re-encode)</option>
+              </select>
             </div>
 
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1">Confidence Threshold: {(threshold * 100).toFixed(0)}%</label>
-                <input type="range" min="0.1" max="0.99" step="0.01" value={threshold} onChange={(e) => setThreshold(e.target.value)} className="w-full accent-blue-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1">Scene Padding: {padding}s</label>
-                <input type="range" min="0.0" max="5.0" step="0.5" value={padding} onChange={(e) => setPadding(e.target.value)} className="w-full accent-blue-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1">Extraction FPS: {fps}</label>
-                <input type="range" min="0.1" max="2.0" step="0.1" value={fps} onChange={(e) => setFps(e.target.value)} className="w-full accent-blue-500" />
-              </div>
+              <div><label className="block text-sm text-gray-400 mb-1">Threshold: {(threshold * 100).toFixed(0)}%</label><input type="range" min="0.1" max="0.99" step="0.01" value={threshold} onChange={(e) => setThreshold(e.target.value)} className="w-full accent-blue-500" /></div>
+              <div><label className="block text-sm text-gray-400 mb-1">Padding: {padding}s</label><input type="range" min="0.0" max="5.0" step="0.5" value={padding} onChange={(e) => setPadding(e.target.value)} className="w-full accent-blue-500" /></div>
+              <div><label className="block text-sm text-gray-400 mb-1">Extraction FPS: {fps}</label><input type="range" min="0.1" max="2.0" step="0.1" value={fps} onChange={(e) => setFps(e.target.value)} className="w-full accent-blue-500" /></div>
             </div>
           </div>
 
@@ -158,7 +159,6 @@ function App() {
         </div>
       </div>
 
-      {/* Full-width Video Review Player appears after analysis completes */}
       {cuts && (
         <div className="max-w-6xl mx-auto">
           <VideoPlayer

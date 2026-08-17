@@ -7,6 +7,7 @@ from flask_cors import CORS
 from flask_socketio import SocketIO
 from config import Config
 from utils.file_browser import get_directory_contents
+from tasks import export_video_task
 
 socketio = SocketIO()
 
@@ -29,7 +30,6 @@ def create_app():
             return jsonify(result), 400
         return jsonify(result), 200
 
-    # NEW: Allow React to play the local video file
     @app.route('/api/stream', methods=['GET'])
     def stream_video():
         video_path = request.args.get('path')
@@ -56,6 +56,20 @@ def create_app():
             
         task = analyze_video_task.delay(video_path, fps, target_labels, threshold, padding)
         return jsonify({"task_id": task.id, "status": "Task Started"}), 202
+
+    @app.route('/api/export', methods=['POST'])
+    def trigger_export():
+        data = request.json or {}
+        video_path = data.get('video_path')
+        srt_path = data.get('srt_path')
+        cuts = data.get('cuts', [])
+        mode = data.get('mode', 'fast') # 'fast' or 'accurate'
+        
+        if not video_path:
+            return jsonify({"error": "video_path is required"}), 400
+            
+        task = export_video_task.delay(video_path, srt_path, cuts, mode)
+        return jsonify({"task_id": task.id, "status": "Export Task Started"}), 202
 
     return app
 

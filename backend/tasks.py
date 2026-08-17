@@ -6,7 +6,8 @@ from config import Config
 from utils.extraction import extract_media
 from ml.vision import VisionModelWrapper
 from ml.audio import AudioModelWrapper
-from utils.aggregator import process_cuts # NEW
+from utils.aggregator import process_cuts
+from utils.export import export_clean_media
 
 celery_app = Celery('autocleanse_tasks', broker=Config.CELERY_BROKER_URL, backend=Config.CELERY_RESULT_BACKEND)
 socketio = SocketIO(message_queue=Config.SOCKETIO_MESSAGE_QUEUE)
@@ -52,4 +53,30 @@ def analyze_video_task(self, video_path, fps, target_labels, threshold, padding)
         
     except Exception as e:
         socketio.emit('task_progress', {'status': f'Error: {str(e)}', 'progress': 0})
+        return {"status": "Failed", "error": str(e)}
+
+@celery_app.task(bind=True)
+def export_video_task(self, video_path, srt_path, cuts, mode):
+    socketio.emit('task_progress', {'status': 'Starting Export...', 'progress': 10})
+    
+    # Save the output in a 'completed' folder in the project root
+    output_dir = os.path.join(os.getcwd(), 'completed')
+    
+    try:
+        socketio.emit('task_progress', {
+            'status': 'Running FFmpeg (This may take a while for Frame-Accurate mode)...', 
+            'progress': 50
+        })
+        
+        result_paths = export_clean_media(video_path, srt_path, cuts, output_dir, mode)
+        
+        socketio.emit('task_progress', {'status': 'Export Complete!', 'progress': 100})
+        socketio.emit('export_complete', {
+            'video_path': result_paths['video'],
+            'subtitle_path': result_paths['subtitle']
+        })
+        
+        return {"status": "Success", "paths": result_paths}
+    except Exception as e:
+        socketio.emit('task_progress', {'status': f'Export Error: {str(e)}', 'progress': 0})
         return {"status": "Failed", "error": str(e)}
