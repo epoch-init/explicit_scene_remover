@@ -273,3 +273,5 @@ Thumbs.db
 # my entries
 temp/
 models/
+completed/
+test_videos/
