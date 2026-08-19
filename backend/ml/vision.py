@@ -26,19 +26,17 @@ class VisionModelWrapper:
             "zero-shot-image-classification", 
             model=model, 
             tokenizer=processor.tokenizer,
-            feature_extractor=processor.feature_extractor,
+            image_processor=processor.image_processor, 
             device=self.device
         )
         
         # We define highly contextual natural language labels. 
-        # CLIP will calculate probabilities across these three categories.
         candidate_labels = [
             "explicit cinematic nudity or sex scene",
             "safe for work movie scene",
             "people kissing or making out"
         ]
         
-        # This is the specific label we want to trigger a cut on
         TARGET_LABEL = "explicit cinematic nudity or sex scene"
         
         results = []
@@ -60,7 +58,7 @@ class VisionModelWrapper:
                     results.append({
                         "start": max(0.0, timestamp_sec - (1/fps)), 
                         "end": timestamp_sec,
-                        "label": "Nudity/NSFW", # Kept standard so the React UI filtering still works
+                        "label": "Nudity/NSFW", 
                         "confidence": float(pred['score'])
                     })
                     break
