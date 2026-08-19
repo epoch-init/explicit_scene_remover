@@ -17,9 +17,11 @@ function App() {
   const [fps, setFps] = useState(1.0);
   const [threshold, setThreshold] = useState(0.7);
   const [padding, setPadding] = useState(1.0);
-  const [exportMode, setExportMode] = useState('fast'); // NEW: Export Mode
+  const [exportMode, setExportMode] = useState('fast');
+  
   const [targetLabels, setTargetLabels] = useState({
     'Nudity/NSFW': true,
+    'Explicit Sounds': true, 
     'Profanity': true
   });
 
