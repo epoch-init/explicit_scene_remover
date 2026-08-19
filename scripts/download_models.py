@@ -1,5 +1,4 @@
 import os
-from transformers import AutoImageProcessor, AutoModelForImageClassification
 from transformers import AutoProcessor, AutoModelForSpeechSeq2Seq
 from transformers import AutoFeatureExtractor, AutoModelForAudioClassification
 
@@ -7,12 +6,10 @@ def download_and_bundle():
     models_dir = os.path.join(os.getcwd(), 'models')
     os.makedirs(models_dir, exist_ok=True)
 
-    print("Downloading Vision Model (Falconsai/nsfw_image_detection)...")
-    vision_path = os.path.join(models_dir, 'vision_nsfw')
-    vision_processor = AutoImageProcessor.from_pretrained("Falconsai/nsfw_image_detection")
-    vision_model = AutoModelForImageClassification.from_pretrained("Falconsai/nsfw_image_detection")
-    vision_processor.save_pretrained(vision_path)
-    vision_model.save_pretrained(vision_path)
+    print("Downloading Vision Model (NudeNet YOLOv8 Object Detector)...")
+    from nudenet import NudeDetector
+    # Initializing the detector automatically downloads the ONNX model to ~/.NudeNet
+    NudeDetector()
 
     print("Downloading Audio Speech Model (openai/whisper-tiny)...")
     audio_path = os.path.join(models_dir, 'audio_whisper')
@@ -28,7 +25,7 @@ def download_and_bundle():
     event_processor.save_pretrained(event_path)
     event_model.save_pretrained(event_path)
 
-    print(f"✅ All 3 Models successfully bundled in {models_dir} for offline use!")
+    print(f"✅ All 3 Models successfully bundled for offline use!")
 
 if __name__ == "__main__":
     download_and_bundle()
